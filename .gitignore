@@ -1,0 +1,30 @@
+.DS_Store
+
+# Secrets and local environment
+secrets/
+.env
+.env.*
+llm_config.json
+agima-salary-analytics/.env.local
+
+# Runtime databases and generated artifacts
+*.sqlite
+*.sqlite-shm
+*.sqlite-wal
+outputs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+
+# Node / Next.js
+node_modules/
+agima-salary-analytics/node_modules/
+agima-salary-analytics/.next/
+agima-salary-analytics/tsconfig.tsbuildinfo
+
+# Logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*

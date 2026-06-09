@@ -1,0 +1,263 @@
+@import "tailwindcss";
+
+:root {
+  --background: #fafbfa;
+  --foreground: #1a1f1a;
+  --primary: #16a34a;
+  --primary-hover: #15803d;
+  --primary-light: #dcfce7;
+  --primary-subtle: #f0fdf4;
+  --sidebar-bg: #0f1a0f;
+  --sidebar-text: #a3c9a3;
+  --sidebar-active: #22c55e;
+  --sidebar-hover: rgba(34, 197, 94, 0.08);
+  --card-bg: #ffffff;
+  --card-hover: #f9fdf9;
+  --border: #e5e7e5;
+  --border-light: #f0f2f0;
+  --text-secondary: #6b7280;
+  --text-muted: #9ca3af;
+  --success: #16a34a;
+  --warning: #f59e0b;
+  --danger: #ef4444;
+  --accent: #10b981;
+}
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --color-primary: var(--primary);
+  --color-primary-hover: var(--primary-hover);
+  --color-primary-light: var(--primary-light);
+  --color-primary-subtle: var(--primary-subtle);
+  --color-sidebar-bg: var(--sidebar-bg);
+  --color-sidebar-text: var(--sidebar-text);
+  --color-sidebar-active: var(--sidebar-active);
+  --color-sidebar-hover: var(--sidebar-hover);
+  --color-card-bg: var(--card-bg);
+  --color-card-hover: var(--card-hover);
+  --color-border: var(--border);
+  --color-border-light: var(--border-light);
+  --color-text-secondary: var(--text-secondary);
+  --color-text-muted: var(--text-muted);
+  --color-success: var(--success);
+  --color-warning: var(--warning);
+  --color-danger: var(--danger);
+  --color-accent: var(--accent);
+  --font-sans: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif;
+  --font-mono: "SFMono-Regular", Consolas, "Liberation Mono", monospace;
+}
+
+body {
+  background: var(--background);
+  color: var(--foreground);
+  font-family: var(--font-sans);
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+/* Современные карточки */
+.card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  transition: all 0.2s ease;
+}
+
+.card:hover {
+  border-color: var(--primary-light);
+  box-shadow: 0 4px 24px rgba(22, 163, 74, 0.06);
+}
+
+/* KPI карточки */
+.kpi-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 20px;
+  padding: 24px;
+  transition: all 0.2s ease;
+}
+
+.kpi-card:hover {
+  border-color: var(--primary-light);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 32px rgba(22, 163, 74, 0.08);
+}
+
+/* Градиент для hero-секции */
+.hero-gradient {
+  background: linear-gradient(135deg, #f0fdf4 0%, #ecfdf5 25%, #f0fdfa 50%, #f5f3ff 100%);
+}
+
+/* Кнопки */
+.btn-primary {
+  background: var(--primary);
+  color: white;
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  border: none;
+  cursor: pointer;
+}
+
+.btn-primary:hover {
+  background: var(--primary-hover);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(22, 163, 74, 0.25);
+}
+
+.btn-secondary {
+  background: var(--card-bg);
+  color: var(--foreground);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 10px 20px;
+  font-weight: 500;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.btn-secondary:hover {
+  border-color: var(--primary);
+  color: var(--primary);
+  background: var(--primary-subtle);
+}
+
+/* Инпуты */
+.input {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  width: 100%;
+}
+
+.input:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+}
+
+/* Селекты */
+.select {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 14px;
+  font-size: 14px;
+  transition: all 0.2s ease;
+  width: 100%;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3csvg xmlns='http://www.w3.org/2000/svg' fill='none' viewBox='0 0 20 20'%3e%3cpath stroke='%236b7280' stroke-linecap='round' stroke-linejoin='round' stroke-width='1.5' d='M6 8l4 4 4-4'/%3e%3c/svg%3e");
+  background-position: right 10px center;
+  background-repeat: no-repeat;
+  background-size: 20px;
+  padding-right: 36px;
+}
+
+.select:focus {
+  outline: none;
+  border-color: var(--primary);
+  box-shadow: 0 0 0 3px rgba(22, 163, 74, 0.1);
+}
+
+/* Бейджи */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 4px 10px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.badge-green {
+  background: var(--primary-light);
+  color: var(--primary);
+}
+
+.badge-yellow {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.badge-gray {
+  background: #f3f4f6;
+  color: #6b7280;
+}
+
+/* Таблица */
+.table-row {
+  transition: background 0.15s ease;
+}
+
+.table-row:hover {
+  background: var(--primary-subtle);
+}
+
+/* Сайдбар */
+.sidebar {
+  background: var(--sidebar-bg);
+  color: var(--sidebar-text);
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 10px 16px;
+  border-radius: 10px;
+  font-size: 14px;
+  transition: all 0.15s ease;
+  color: var(--sidebar-text);
+  text-decoration: none;
+}
+
+.sidebar-link:hover {
+  background: var(--sidebar-hover);
+  color: white;
+}
+
+.sidebar-link.active {
+  background: var(--sidebar-active);
+  color: white;
+  font-weight: 500;
+}
+
+/* Графики */
+.recharts-cartesian-grid-horizontal line,
+.recharts-cartesian-grid-vertical line {
+  stroke: var(--border-light);
+}
+
+/* Анимации */
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(8px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fadeIn 0.3s ease forwards;
+}
+
+/* Скроллбар */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--border);
+  border-radius: 3px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-muted);
+}
