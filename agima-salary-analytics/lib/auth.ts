@@ -4,12 +4,26 @@ import { signToken, type JWTPayload } from "./auth-token";
 
 type StoredUser = User & { passwordHash: string };
 
+function normalizeUsersJson(raw: string): string {
+  const trimmed = raw.trim();
+  const quote = trimmed[0];
+
+  if (
+    (quote === "'" || quote === '"') &&
+    trimmed[trimmed.length - 1] === quote
+  ) {
+    return trimmed.slice(1, -1);
+  }
+
+  return trimmed;
+}
+
 function getUsers(): StoredUser[] {
   const raw = process.env.APP_USERS_JSON;
   if (!raw) return [];
 
   try {
-    const parsed = JSON.parse(raw) as StoredUser[];
+    const parsed = JSON.parse(normalizeUsersJson(raw)) as StoredUser[];
     return Array.isArray(parsed)
       ? parsed.filter((user) => user.email && user.passwordHash && user.role)
       : [];
