@@ -104,9 +104,9 @@ export default function DashboardLayout({
   );
 
   return (
-    <div className="min-h-screen flex">
+    <div className="min-h-screen flex items-start">
       {/* Сайдбар */}
-      <aside className="w-60 flex flex-col bg-gradient-to-b from-gray-950 via-gray-900 to-emerald-950 relative overflow-hidden">
+      <aside className="sticky top-0 h-screen w-60 shrink-0 flex flex-col bg-gradient-to-b from-gray-950 via-gray-900 to-emerald-950 relative overflow-hidden">
         {/* Декоративный градиент сверху */}
         <div className="absolute top-0 left-0 right-0 h-32 bg-gradient-to-b from-emerald-500/10 to-transparent pointer-events-none" />
 
@@ -173,7 +173,7 @@ export default function DashboardLayout({
       </aside>
 
       {/* Основной контент */}
-      <main className="flex-1 overflow-auto bg-background">
+      <main className="min-h-screen flex-1 bg-background">
         <div className="p-8 max-w-[1400px] mx-auto">{children}</div>
       </main>
     </div>

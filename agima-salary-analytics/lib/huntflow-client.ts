@@ -111,7 +111,7 @@ export class HuntflowClient {
       this.buildPath(`/accounts/${this.accountId}/applicants`, {
         page,
         count: perPage,
-        vacancy_id: vacancyId,
+        vacancy: vacancyId,
       })
     );
   }
@@ -204,23 +204,55 @@ export class HuntflowClient {
 
   async collectRawExportRowsForInternalLlm(options?: {
     vacancyIds?: number[];
+    onProgress?: (progress: {
+      current: number;
+      total: number;
+      message: string;
+    }) => void;
   }): Promise<HuntflowRawExportRow[]> {
     const rows: HuntflowRawExportRow[] = [];
+    options?.onProgress?.({
+      current: 0,
+      total: 1,
+      message: "Загружаем список вакансий из Huntflow",
+    });
     const vacancies = await this.getVacancies();
     const vacanciesById = new Map(vacancies.map((vacancy) => [vacancy.id, vacancy]));
+    options?.onProgress?.({
+      current: 0,
+      total: 1,
+      message: "Загружаем статусы подбора из Huntflow",
+    });
     const statusNames = await this.getVacancyStatusNames();
     const exportDate = new Date().toISOString();
     const vacancyIds = options?.vacancyIds?.filter((id) => Number.isFinite(id));
     const targets = vacancyIds?.length ? vacancyIds : [undefined];
     const perPage = 30;
+    const addedRowKeys = new Set<string>();
 
-    for (const targetVacancyId of targets) {
+    for (const [targetIndex, targetVacancyId] of targets.entries()) {
+      const targetLabel =
+        targetVacancyId !== undefined
+          ? vacanciesById.get(targetVacancyId)?.position ||
+            vacanciesById.get(targetVacancyId)?.name ||
+            vacanciesById.get(targetVacancyId)?.title ||
+            `вакансия ${targetVacancyId}`
+          : "все вакансии";
+      options?.onProgress?.({
+        current: targetIndex,
+        total: targets.length,
+        message: `Загружаем кандидатов: ${targetIndex + 1} из ${targets.length} (${targetLabel})`,
+      });
       let page = 1;
 
       while (true) {
         const response = await this.getApplicants(page, perPage, targetVacancyId);
-        const applicants = response.items || [];
-        if (applicants.length === 0) break;
+        const pageApplicants = response.items || [];
+        const applicants = pageApplicants.filter((applicant) => {
+          if (targetVacancyId === undefined) return true;
+          return this.getApplicantVacancyIds(applicant).includes(targetVacancyId);
+        });
+        if (pageApplicants.length === 0) break;
 
         for (const applicant of applicants) {
           const linkedVacancyIds = this.getApplicantVacancyIds(applicant);
@@ -232,6 +264,10 @@ export class HuntflowClient {
                 : [undefined];
 
           for (const linkedVacancyId of recordVacancyIds) {
+            const rowKey = `${applicant.id}:${linkedVacancyId || "none"}`;
+            if (addedRowKeys.has(rowKey)) continue;
+            addedRowKeys.add(rowKey);
+
             const vacancy = linkedVacancyId ? vacanciesById.get(linkedVacancyId) : undefined;
             const record = await huntflowToSalaryRecord(
               applicant,
@@ -265,9 +301,19 @@ export class HuntflowClient {
           }
         }
 
-        if (applicants.length < perPage) break;
+        if (pageApplicants.length < perPage) break;
         page++;
+        options?.onProgress?.({
+          current: targetIndex,
+          total: targets.length,
+          message: `Загружаем кандидатов: ${targetIndex + 1} из ${targets.length} (${targetLabel}), уже ${rows.length}`,
+        });
       }
+      options?.onProgress?.({
+        current: targetIndex + 1,
+        total: targets.length,
+        message: `Загружено вакансий: ${targetIndex + 1} из ${targets.length}. Кандидатов: ${rows.length}`,
+      });
     }
 
     return rows;

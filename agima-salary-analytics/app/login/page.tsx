@@ -88,6 +88,7 @@ export default function LoginPage() {
                 required
                 className="input"
                 placeholder="Введите пароль"
+                autoComplete="current-password"
               />
             </div>
 
@@ -105,26 +106,6 @@ export default function LoginPage() {
               {loading ? "Вход..." : "Войти"}
             </button>
           </form>
-        </div>
-
-        {/* Тестовые аккаунты */}
-        <div className="mt-6 card p-5">
-          <p className="text-xs font-medium text-text-secondary mb-3 uppercase tracking-wide">Тестовые аккаунты</p>
-          <div className="space-y-2 text-sm">
-            <div className="flex items-center justify-between">
-              <span className="text-text-secondary">EMAIL_MASKED</span>
-              <span className="badge badge-green">admin</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-secondary">EMAIL_MASKED</span>
-              <span className="badge badge-green">HR</span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-text-secondary">EMAIL_MASKED</span>
-              <span className="badge badge-gray">manager</span>
-            </div>
-          </div>
-          <p className="text-xs text-text-muted mt-3">Пароль: password123</p>
         </div>
       </div>
     </div>

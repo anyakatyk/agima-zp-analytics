@@ -22,8 +22,9 @@ const INTERNAL_LLM_MODEL =
   process.env.INTERNAL_LLM_MODEL ||
   process.env.LLM_MODEL ||
   "llama3.1:8b";
-const BATCH_SIZE = 20;
+const BATCH_SIZE = 10;
 const LLM_TIMEOUT_MS = 60_000;
+const LLM_MAX_ATTEMPTS = 2;
 const FORBIDDEN_KEYS = new Set([
   "fullName",
   "fio",
@@ -53,24 +54,37 @@ export async function cleanHuntflowRowsWithInternalLlm(
 async function cleanBatch(
   rows: HuntflowRawExportRow[]
 ): Promise<CleanHuntflowExportRow[]> {
-  const response = await callInternalLlm(rows);
-  const parsed = parseLlmJson(response);
-  const cleanedRows = Array.isArray(parsed) ? parsed : parsed.rows;
+  let lastError: Error | null = null;
 
-  if (!Array.isArray(cleanedRows)) {
-    throw new Error("Internal LLM returned JSON without rows array.");
+  for (let attempt = 1; attempt <= LLM_MAX_ATTEMPTS; attempt++) {
+    try {
+      const response = await callInternalLlm(rows, attempt);
+      const parsed = parseLlmJson(response);
+      const cleanedRows = extractRows(parsed);
+
+      if (!Array.isArray(cleanedRows)) {
+        throw new Error("Внутренняя LLM вернула JSON без массива rows.");
+      }
+
+      if (cleanedRows.length !== rows.length) {
+        throw new Error(
+          `Внутренняя LLM вернула ${cleanedRows.length} строк, ожидалось ${rows.length}.`
+        );
+      }
+
+      return cleanedRows.map(validateCleanRow);
+    } catch (error) {
+      lastError = error instanceof Error ? error : new Error("Ошибка внутренней LLM");
+    }
   }
 
-  if (cleanedRows.length !== rows.length) {
-    throw new Error(
-      `Internal LLM returned ${cleanedRows.length} rows, expected ${rows.length}.`
-    );
-  }
-
-  return cleanedRows.map(validateCleanRow);
+  throw lastError || new Error("Внутренняя LLM не смогла очистить строки.");
 }
 
-async function callInternalLlm(rows: HuntflowRawExportRow[]): Promise<string> {
+async function callInternalLlm(
+  rows: HuntflowRawExportRow[],
+  attempt: number
+): Promise<string> {
   const controller = new AbortController();
   const timeout = setTimeout(() => controller.abort(), LLM_TIMEOUT_MS);
 
@@ -83,7 +97,7 @@ async function callInternalLlm(rows: HuntflowRawExportRow[]): Promise<string> {
         model: INTERNAL_LLM_MODEL,
         stream: false,
         format: "json",
-        prompt: buildPrompt(rows),
+        prompt: buildPrompt(rows, attempt),
       }),
     });
 
@@ -109,17 +123,21 @@ async function callInternalLlm(rows: HuntflowRawExportRow[]): Promise<string> {
   }
 }
 
-function buildPrompt(rows: HuntflowRawExportRow[]): string {
+function buildPrompt(rows: HuntflowRawExportRow[], attempt: number): string {
   return [
     "Ты внутренняя локальная LLM для очистки персональных данных перед передачей данных в сервис аналитики.",
     "Тебе передан JSON-массив строк Huntflow. В каждой строке может быть поле fullName с ФИО кандидата.",
     "Верни строго JSON без markdown.",
-    "Верни объект вида {\"rows\":[...]}",
+    "Верни ровно один JSON-объект вида {\"rows\":[...]}",
+    `В массиве rows должно быть ровно ${rows.length} объектов — по одному на каждую входную строку.`,
     "В каждой строке результата должны быть только эти ключи:",
     "rowIndex, lastWorkplace, position, salary, birthDate, status, vacancyName, grade, workshop, subWorkshop, date.",
     "Полностью удали fullName, ФИО, имя, фамилию и любые поля с персональными именами.",
     "Не добавляй новые сведения. Не меняй зарплату, даты, вакансию, грейд, цех и подцех.",
     "Если поле пустое, верни пустую строку.",
+    attempt > 1
+      ? "Повторная попытка: предыдущий ответ был неверного формата. Не возвращай объект одной строки, текст, пояснения или другой ключ вместо rows."
+      : "",
     "",
     JSON.stringify(rows),
   ].join("\n");
@@ -133,6 +151,26 @@ function parseLlmJson(value: string): { rows?: unknown[] } | unknown[] {
     if (!match) throw new Error("Internal LLM response is not JSON.");
     return JSON.parse(match[0]);
   }
+}
+
+function extractRows(value: { rows?: unknown[] } | unknown[]): unknown[] | undefined {
+  if (Array.isArray(value)) return value;
+  if (!value || typeof value !== "object") return undefined;
+
+  const record = value as Record<string, unknown>;
+  const directKeys = ["rows", "data", "items", "result", "records"];
+  for (const key of directKeys) {
+    if (Array.isArray(record[key])) return record[key];
+  }
+
+  for (const nestedValue of Object.values(record)) {
+    if (nestedValue && typeof nestedValue === "object" && !Array.isArray(nestedValue)) {
+      const nestedRows = extractRows(nestedValue as { rows?: unknown[] });
+      if (nestedRows) return nestedRows;
+    }
+  }
+
+  return undefined;
 }
 
 function validateCleanRow(value: unknown): CleanHuntflowExportRow {

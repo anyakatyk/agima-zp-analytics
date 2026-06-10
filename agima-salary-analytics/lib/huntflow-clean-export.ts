@@ -47,6 +47,14 @@ export async function buildCleanHuntflowWorkbook(params: {
   });
   const rawRows = await client.collectRawExportRowsForInternalLlm({
     vacancyIds: params.vacancyIds,
+    onProgress: (progress) => {
+      params.onProgress?.({
+        stage: "huntflow",
+        message: progress.message,
+        current: progress.current,
+        total: progress.total,
+      });
+    },
   });
   params.onProgress?.({
     stage: "llm",

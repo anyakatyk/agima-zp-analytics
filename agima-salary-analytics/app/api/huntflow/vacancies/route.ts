@@ -40,17 +40,31 @@ export async function GET(request: NextRequest) {
     );
   }
 
-  const client = new HuntflowClient(hfToken, parseInt(accountId));
-  const vacancies = await client.getVacancies();
+  try {
+    const client = new HuntflowClient(hfToken, parseInt(accountId));
+    const vacancies = await client.getVacancies();
 
-  return NextResponse.json(
-    {
-      vacancies: vacancies.map((vacancy) => ({
-        id: vacancy.id,
-        name: getVacancyName(vacancy),
-        status: vacancy.status || "",
-      })),
-    },
-    { headers: { "Cache-Control": "no-store" } }
-  );
+    return NextResponse.json(
+      {
+        vacancies: vacancies.map((vacancy) => ({
+          id: vacancy.id,
+          name: getVacancyName(vacancy),
+          status: vacancy.status || "",
+        })),
+      },
+      { headers: { "Cache-Control": "no-store" } }
+    );
+  } catch (error) {
+    const message =
+      error instanceof Error
+        ? error.message
+        : "Не удалось загрузить вакансии из Huntflow";
+
+    return NextResponse.json(
+      {
+        error: message,
+      },
+      { status: 500, headers: { "Cache-Control": "no-store" } }
+    );
+  }
 }

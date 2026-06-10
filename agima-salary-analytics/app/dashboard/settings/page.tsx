@@ -69,6 +69,7 @@ export default function SettingsPage() {
   const [vacanciesError, setVacanciesError] = useState<string | null>(null);
   const [exportScope, setExportScope] = useState<"all" | "selected">("all");
   const [selectedVacancyIds, setSelectedVacancyIds] = useState<number[]>([]);
+  const [vacancySearch, setVacancySearch] = useState("");
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Состояние для маппинга
@@ -99,14 +100,19 @@ export default function SettingsPage() {
     setVacanciesError(null);
     try {
       const res = await fetch("/api/huntflow/vacancies");
-      const data = await res.json();
+      const text = await res.text();
+      const data = text ? JSON.parse(text) : {};
       if (!res.ok) {
         setVacanciesError(data.error || "Не удалось загрузить вакансии");
         return;
       }
       setHuntflowVacancies(data.vacancies || []);
-    } catch {
-      setVacanciesError("Не удалось загрузить вакансии");
+    } catch (error) {
+      setVacanciesError(
+        error instanceof Error
+          ? `Не удалось загрузить вакансии: ${error.message}`
+          : "Не удалось загрузить вакансии"
+      );
     } finally {
       setVacanciesLoading(false);
     }
@@ -384,6 +390,21 @@ export default function SettingsPage() {
   const exportDisabled =
     exporting || (exportScope === "selected" && selectedVacancyIds.length === 0);
 
+  const normalizedVacancySearch = vacancySearch.trim().toLowerCase();
+  const filteredHuntflowVacancies = normalizedVacancySearch
+    ? huntflowVacancies.filter((vacancy) =>
+        `${vacancy.name} ${vacancy.status || ""}`
+          .toLowerCase()
+          .includes(normalizedVacancySearch)
+      )
+    : huntflowVacancies;
+
+  const resetHuntflowExport = () => {
+    setExporting(false);
+    setExportJob(null);
+    setExportResult("Статус выгрузки сброшен. Если старая попытка зависла, запустите выгрузку заново.");
+  };
+
   return (
     <div className="space-y-6">
       <div>
@@ -605,6 +626,14 @@ export default function SettingsPage() {
                   Обновить список
                 </button>
               </div>
+              <input
+                type="search"
+                value={vacancySearch}
+                onChange={(e) => setVacancySearch(e.target.value)}
+                disabled={exporting}
+                placeholder="Поиск по названию вакансии"
+                className="mb-3 w-full rounded-lg border border-gray-200 bg-white px-3 py-2 text-sm text-gray-900 placeholder:text-gray-400 disabled:opacity-50"
+              />
 
               {vacanciesLoading ? (
                 <p className="text-sm text-gray-500">Загружаем вакансии...</p>
@@ -612,33 +641,40 @@ export default function SettingsPage() {
                 <p className="text-sm text-red-600">{vacanciesError}</p>
               ) : huntflowVacancies.length === 0 ? (
                 <p className="text-sm text-gray-500">Вакансии не найдены</p>
+              ) : filteredHuntflowVacancies.length === 0 ? (
+                <p className="text-sm text-gray-500">По этому запросу вакансий нет</p>
               ) : (
-                <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white">
-                  {huntflowVacancies.map((vacancy) => (
-                    <label
-                      key={vacancy.id}
-                      className="flex items-start gap-3 border-b border-gray-100 px-3 py-2 last:border-b-0"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selectedVacancyIds.includes(vacancy.id)}
-                        onChange={() => toggleVacancySelection(vacancy.id)}
-                        disabled={exporting}
-                        className="mt-1"
-                      />
-                      <span className="min-w-0">
-                        <span className="block text-sm font-medium text-gray-900">
-                          {vacancy.name}
-                        </span>
-                        {vacancy.status && (
-                          <span className="block text-xs text-gray-500">
-                            {vacancy.status}
+                <>
+                  <p className="mb-2 text-xs text-gray-500">
+                    Найдено: {filteredHuntflowVacancies.length}
+                  </p>
+                  <div className="max-h-64 overflow-y-auto rounded-lg border border-gray-200 bg-white">
+                    {filteredHuntflowVacancies.map((vacancy) => (
+                      <label
+                        key={vacancy.id}
+                        className="flex items-start gap-3 border-b border-gray-100 px-3 py-2 last:border-b-0"
+                      >
+                        <input
+                          type="checkbox"
+                          checked={selectedVacancyIds.includes(vacancy.id)}
+                          onChange={() => toggleVacancySelection(vacancy.id)}
+                          disabled={exporting}
+                          className="mt-1"
+                        />
+                        <span className="min-w-0">
+                          <span className="block text-sm font-medium text-gray-900">
+                            {vacancy.name}
                           </span>
-                        )}
-                      </span>
-                    </label>
-                  ))}
-                </div>
+                          {vacancy.status && (
+                            <span className="block text-xs text-gray-500">
+                              {vacancy.status}
+                            </span>
+                          )}
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                </>
               )}
             </div>
           )}
@@ -650,6 +686,15 @@ export default function SettingsPage() {
         >
           {exporting ? "Фоновая выгрузка запущена..." : "Скачать выгрузку фоном"}
         </button>
+        {exporting && (
+          <button
+            type="button"
+            onClick={resetHuntflowExport}
+            className="ml-3 px-6 py-2.5 border border-border rounded-lg text-gray-700 hover:bg-gray-50"
+          >
+            Сбросить статус
+          </button>
+        )}
         {exportResult && (
           <p className={`mt-3 text-sm ${exportResult.startsWith("Ошибка") ? "text-red-600" : "text-green-600"}`}>
             {exportResult}

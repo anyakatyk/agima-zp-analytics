@@ -65,6 +65,7 @@ def fetch_metric_rows(metrics_db, snapshot_id=None):
             period,
             trigger_type,
             role,
+            source_system,
             workshop,
             sub_workshop,
             location,
@@ -89,6 +90,7 @@ def fetch_metric_rows(metrics_db, snapshot_id=None):
             age_bucket,
             resume_updated_at,
             role,
+            source_system,
             workshop,
             sub_workshop,
             grade,
@@ -140,6 +142,7 @@ def fetch_metric_rows(metrics_db, snapshot_id=None):
             s.period,
             s.trigger_type,
             s.role,
+            s.source_system,
             s.location,
             s.grade,
             s.stack,
@@ -168,6 +171,7 @@ def ensure_metric_report_columns(metrics_db):
     migrations = {
         "workshop": "ALTER TABLE salary_metric_observations ADD COLUMN workshop TEXT",
         "sub_workshop": "ALTER TABLE salary_metric_observations ADD COLUMN sub_workshop TEXT",
+        "source_system": "ALTER TABLE salary_metric_observations ADD COLUMN source_system TEXT NOT NULL DEFAULT 'hh_api'",
         "llm_role": "ALTER TABLE salary_metric_observations ADD COLUMN llm_role TEXT",
         "llm_grade": "ALTER TABLE salary_metric_observations ADD COLUMN llm_grade TEXT",
         "llm_stack": "ALTER TABLE salary_metric_observations ADD COLUMN llm_stack TEXT",
@@ -186,6 +190,7 @@ def ensure_metric_report_columns(metrics_db):
     snapshot_migrations = {
         "workshop": "ALTER TABLE metric_snapshots ADD COLUMN workshop TEXT",
         "sub_workshop": "ALTER TABLE metric_snapshots ADD COLUMN sub_workshop TEXT",
+        "source_system": "ALTER TABLE metric_snapshots ADD COLUMN source_system TEXT NOT NULL DEFAULT 'hh_api'",
     }
     for column, sql in snapshot_migrations.items():
         if column not in existing_snapshot_columns:
@@ -389,6 +394,7 @@ def build_metrics_workbook(snapshot, rows, groups, history, xlsx_path):
         ("Period", snapshot["period"]),
         ("Trigger", snapshot["trigger_type"]),
         ("Role", snapshot["role"]),
+        ("Source", snapshot.get("source_system")),
         ("Workshop", snapshot.get("workshop")),
         ("Sub-workshop", snapshot.get("sub_workshop")),
         ("Location", snapshot["location"]),
@@ -434,6 +440,7 @@ def build_metrics_workbook(snapshot, rows, groups, history, xlsx_path):
         row["period"],
         row["trigger_type"],
         row["role"],
+        row.get("source_system"),
         row["location"],
         row["grade"],
         row["stack"],
@@ -445,15 +452,16 @@ def build_metrics_workbook(snapshot, rows, groups, history, xlsx_path):
     ] for row in history]
     append_table(
         history_sheet,
-        ["Snapshot id", "Created at", "Period", "Trigger", "Role", "Location", "Grade", "Stack", "Count", "Median", "Average", "Min", "Max"],
+        ["Snapshot id", "Created at", "Period", "Trigger", "Role", "Source", "Location", "Grade", "Stack", "Count", "Median", "Average", "Min", "Max"],
         history_rows,
     )
-    set_widths(history_sheet, [12, 24, 12, 14, 22, 18, 14, 22, 10, 12, 12, 12, 12])
+    set_widths(history_sheet, [12, 24, 12, 14, 22, 14, 18, 14, 22, 10, 12, 12, 12, 12])
 
     data_sheet = wb.create_sheet("Metric Data")
     data_rows = [[
         row["found_at"],
         row["role"],
+        row.get("source_system"),
         row.get("workshop"),
         row.get("sub_workshop"),
         row["area"],
@@ -485,6 +493,7 @@ def build_metrics_workbook(snapshot, rows, groups, history, xlsx_path):
         [
             "Found at",
             "Role",
+            "Source",
             "Workshop",
             "Sub-workshop",
             "Location",
@@ -513,7 +522,7 @@ def build_metrics_workbook(snapshot, rows, groups, history, xlsx_path):
         ],
         data_rows,
     )
-    set_widths(data_sheet, [24, 22, 24, 24, 18, 14, 22, 14, 10, 8, 14, 24, 32, 18, 16, 20, 10, 10, 10, 24, 14, 24, 16, 36, 24, 18, 42])
+    set_widths(data_sheet, [24, 22, 14, 24, 24, 18, 14, 22, 14, 10, 8, 14, 24, 32, 18, 16, 20, 10, 10, 10, 24, 14, 24, 16, 36, 24, 18, 42])
 
     for ws in wb.worksheets:
         for row in ws.iter_rows():

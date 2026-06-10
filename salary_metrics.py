@@ -73,7 +73,7 @@ def normalize_stack(value):
 
 
 def infer_grade(title, fallback):
-    if fallback:
+    if fallback and fallback != "all":
         return fallback
     text = (title or "").lower()
     checks = [
@@ -129,6 +129,8 @@ def connect_metrics_db(path):
             location TEXT NOT NULL,
             grade TEXT NOT NULL,
             stack TEXT NOT NULL,
+            source_system TEXT NOT NULL DEFAULT 'hh_api',
+            search_id INTEGER,
             workshop TEXT,
             sub_workshop TEXT,
             source_db TEXT NOT NULL,
@@ -144,6 +146,8 @@ def connect_metrics_db(path):
     snapshot_migrations = {
         "workshop": "ALTER TABLE metric_snapshots ADD COLUMN workshop TEXT",
         "sub_workshop": "ALTER TABLE metric_snapshots ADD COLUMN sub_workshop TEXT",
+        "source_system": "ALTER TABLE metric_snapshots ADD COLUMN source_system TEXT NOT NULL DEFAULT 'hh_api'",
+        "search_id": "ALTER TABLE metric_snapshots ADD COLUMN search_id INTEGER",
     }
     for column, sql in snapshot_migrations.items():
         if column not in existing_snapshot_columns:
@@ -158,6 +162,7 @@ def connect_metrics_db(path):
             location TEXT NOT NULL,
             grade TEXT NOT NULL,
             stack TEXT NOT NULL,
+            source_system TEXT NOT NULL DEFAULT 'hh_api',
             workshop TEXT,
             sub_workshop TEXT,
             salary_amount INTEGER,
@@ -191,6 +196,7 @@ def connect_metrics_db(path):
         "marked": "ALTER TABLE salary_metric_observations ADD COLUMN marked INTEGER NOT NULL DEFAULT 0",
         "workshop": "ALTER TABLE salary_metric_observations ADD COLUMN workshop TEXT",
         "sub_workshop": "ALTER TABLE salary_metric_observations ADD COLUMN sub_workshop TEXT",
+        "source_system": "ALTER TABLE salary_metric_observations ADD COLUMN source_system TEXT NOT NULL DEFAULT 'hh_api'",
     }
     for column, sql in migrations.items():
         if column not in existing_columns:
@@ -266,6 +272,7 @@ def build_observation(row, args):
         "location": location,
         "grade": grade,
         "stack": stack,
+        "source_system": "hh_api",
         "workshop": args.workshop,
         "sub_workshop": args.sub_workshop,
         "salary_amount": row["salary_amount"],
@@ -296,13 +303,15 @@ def insert_snapshot(conn, args):
             location,
             grade,
             stack,
+            source_system,
+            search_id,
             workshop,
             sub_workshop,
             source_db,
             source_query,
             notes
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             now_utc_iso(),
@@ -312,6 +321,8 @@ def insert_snapshot(conn, args):
             args.location or "from_hh_area",
             args.grade or "auto",
             normalize_stack(args.stack),
+            "hh_api",
+            args.search_id,
             args.workshop,
             args.sub_workshop,
             args.source_db,
@@ -333,6 +344,7 @@ def insert_observations(conn, snapshot_id, observations):
                 location,
                 grade,
                 stack,
+                source_system,
                 workshop,
                 sub_workshop,
                 salary_amount,
@@ -350,7 +362,7 @@ def insert_observations(conn, snapshot_id, observations):
                 marked,
                 source_query
             )
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             """,
             (
                 snapshot_id,
@@ -359,6 +371,7 @@ def insert_observations(conn, snapshot_id, observations):
                 item["location"],
                 item["grade"],
                 item["stack"],
+                item["source_system"],
                 item["workshop"],
                 item["sub_workshop"],
                 item["salary_amount"],
@@ -419,6 +432,7 @@ def insert_groups(conn, snapshot_id, observations):
         "overall": lambda item: "all",
         "location": lambda item: item["location"],
         "role": lambda item: item["role"],
+        "source_system": lambda item: item["source_system"],
         "workshop": lambda item: item["workshop"] or "unknown",
         "sub_workshop": lambda item: item["sub_workshop"] or "unknown",
         "grade": lambda item: item["grade"],
@@ -525,7 +539,8 @@ def parse_args():
 
     snapshot = subparsers.add_parser("snapshot", help="Create a monthly or on-demand metric snapshot.")
     snapshot.add_argument("--period", default=current_period(), help="Metric period, for example 2026-06.")
-    snapshot.add_argument("--trigger-type", default="on_demand", choices=["on_demand", "monthly"])
+    snapshot.add_argument("--trigger-type", default="on_demand", choices=["on_demand", "monthly", "subscription"])
+    snapshot.add_argument("--search-id", type=int, help="Saved HH search id.")
     snapshot.add_argument("--query", help="Only include rows from this source search query.")
     snapshot.add_argument("--role", help="Requirement role label.")
     snapshot.add_argument("--location", help="Requirement location label.")

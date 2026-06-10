@@ -11,6 +11,7 @@ import {
   Tooltip,
   ResponsiveContainer,
   CartesianGrid,
+  Legend,
 } from "recharts";
 
 type Stats = {
@@ -42,7 +43,76 @@ type Candidate = {
   createdAt: string;
 };
 
+type HhSalarySummary = {
+  snapshotId: number | null;
+  source: "HH";
+  observations: number;
+  min: number | null;
+  p25: number | null;
+  median: number | null;
+  average: number | null;
+  p75: number | null;
+  max: number | null;
+};
+
+type HhSalaryGroup = {
+  groupType: string;
+  groupValue: string;
+  searchName?: string;
+  observations: number;
+  min: number | null;
+  p25: number | null;
+  median: number | null;
+  average: number | null;
+  p75: number | null;
+  max: number | null;
+};
+
+type HhSearchOption = {
+  id: number;
+  name: string;
+  role?: string;
+};
+
+type HhSnapshotOption = {
+  id: number;
+  created_at: string;
+  role: string;
+  search_name?: string | null;
+  summary?: {
+    observations: number;
+    min: number | null;
+    median: number | null;
+    average: number | null;
+    max: number | null;
+  } | null;
+};
+
+type HhFilterOptions = {
+  roles: string[];
+  grades: string[];
+  workshops: string[];
+  subWorkshops: string[];
+  cuts: HhSnapshotOption[];
+};
+
+const HH_GROUP_TYPES = [
+  { value: "role", label: "Роль" },
+  { value: "grade", label: "Грейд" },
+  { value: "location", label: "Локация" },
+  { value: "workshop", label: "Цех" },
+  { value: "sub_workshop", label: "Подцех" },
+  { value: "stack", label: "Стек" },
+  { value: "age_bucket", label: "Возраст" },
+  { value: "employment_form", label: "Форма занятости" },
+  { value: "resume_updated_month", label: "Месяц обновления резюме" },
+  { value: "viewed", label: "Просмотрено" },
+  { value: "favorited", label: "В избранном" },
+  { value: "marked", label: "Отмечено" },
+];
+
 function formatSalary(n: number): string {
+  if (!n) return "—";
   if (n >= 1_000_000) return `${(n / 1_000_000).toFixed(1)} млн`;
   if (n >= 1_000) return `${Math.round(n / 1_000)}к`;
   return String(n);
@@ -78,6 +148,11 @@ export default function DashboardPage() {
   const [candidates, setCandidates] = useState<Candidate[]>([]);
   const [vacancies, setVacancies] = useState<string[]>([]);
   const [grades, setGrades] = useState<string[]>([]);
+  const [hhSummary, setHhSummary] = useState<HhSalarySummary | null>(null);
+  const [hhGroups, setHhGroups] = useState<HhSalaryGroup[]>([]);
+  const [hhSearches, setHhSearches] = useState<HhSearchOption[]>([]);
+  const [hhSnapshots, setHhSnapshots] = useState<HhSnapshotOption[]>([]);
+  const [hhFilterOptions, setHhFilterOptions] = useState<HhFilterOptions>({ roles: [], grades: [], workshops: [], subWorkshops: [], cuts: [] });
   const [loading, setLoading] = useState(true);
 
   // Фильтры
@@ -88,6 +163,12 @@ export default function DashboardPage() {
   const [birthDateFrom, setBirthDateFrom] = useState("");
   const [birthDateTo, setBirthDateTo] = useState("");
   const [onlyWithSalary, setOnlyWithSalary] = useState(false);
+  const [hhChartRole, setHhChartRole] = useState("");
+  const [hhChartGrade, setHhChartGrade] = useState("");
+  const [hhChartWorkshop, setHhChartWorkshop] = useState("");
+  const [hhChartSubWorkshop, setHhChartSubWorkshop] = useState("");
+  const [hhChartSnapshotId, setHhChartSnapshotId] = useState("");
+  const [hhChartGroupType, setHhChartGroupType] = useState("role");
 
   useEffect(() => {
     let cancelled = false;
@@ -120,6 +201,62 @@ export default function DashboardPage() {
         const uniqueGrades = Array.from(new Set(allCand.map((c: Candidate) => c.grade).filter(Boolean))) as string[];
         setVacancies(uniqueVacancies);
         setGrades(uniqueGrades);
+
+        const hhParams = new URLSearchParams();
+        if (hhChartRole) hhParams.set("role", hhChartRole);
+        if (hhChartGrade) hhParams.set("grade", hhChartGrade);
+        if (hhChartWorkshop) hhParams.set("workshop", hhChartWorkshop);
+        if (hhChartSubWorkshop) hhParams.set("subWorkshop", hhChartSubWorkshop);
+        if (hhChartSnapshotId) hhParams.set("snapshotIds", hhChartSnapshotId);
+        if (hhChartGroupType) hhParams.set("groupType", hhChartGroupType);
+        if (dateFrom) hhParams.set("fromDate", dateFrom);
+        if (dateTo) hhParams.set("toDate", dateTo);
+        if (birthDateFrom) hhParams.set("birthDateFrom", birthDateFrom);
+        if (birthDateTo) hhParams.set("birthDateTo", birthDateTo);
+        const hhRes = await fetch(`/api/hh/searches?${hhParams}`);
+        if (hhRes.ok) {
+          const hhData = await hhRes.json();
+          if (!cancelled) {
+            setHhSearches(hhData.searches || []);
+            setHhSnapshots(hhData.snapshots || []);
+            setHhFilterOptions(hhData.filterOptions || { roles: [], grades: [], workshops: [], subWorkshops: [], cuts: [] });
+            const latestSummary = hhData.snapshots?.[0]?.summary;
+            setHhSummary(latestSummary ? {
+              snapshotId: hhData.snapshots[0].id,
+              source: "HH",
+              observations: latestSummary.observations,
+              min: latestSummary.min,
+              p25: null,
+              median: latestSummary.median,
+              average: latestSummary.average,
+              p75: null,
+              max: latestSummary.max,
+            } : null);
+            setHhGroups((hhData.groups || []).map((item: {
+              search_name?: string;
+              group_type: string;
+              group_value: string;
+              observations_count: number;
+              salary_min: number | null;
+              salary_p25: number | null;
+              salary_median: number | null;
+              salary_avg: number | null;
+              salary_p75: number | null;
+              salary_max: number | null;
+            }) => ({
+              searchName: item.search_name,
+              groupType: item.group_type,
+              groupValue: item.group_value,
+              observations: item.observations_count,
+              min: item.salary_min,
+              p25: item.salary_p25,
+              median: item.salary_median,
+              average: item.salary_avg,
+              p75: item.salary_p75,
+              max: item.salary_max,
+            })));
+          }
+        }
       } catch {
         console.error("Failed to load data");
       } finally {
@@ -131,7 +268,7 @@ export default function DashboardPage() {
     return () => {
       cancelled = true;
     };
-  }, [dateFrom, dateTo, vacancyFilter, gradeFilter, birthDateFrom, birthDateTo, onlyWithSalary]);
+  }, [dateFrom, dateTo, vacancyFilter, gradeFilter, birthDateFrom, birthDateTo, onlyWithSalary, hhChartRole, hhChartGrade, hhChartWorkshop, hhChartSubWorkshop, hhChartSnapshotId, hhChartGroupType]);
 
   // Агрегация по вакансиям
   const vacancyStats: VacancyStat[] = (() => {
@@ -175,6 +312,85 @@ export default function DashboardPage() {
         avgSalary: data.withSalary > 0 ? Math.round(data.totalSalary / data.withSalary) : 0,
       }))
       .sort((a, b) => b.count - a.count);
+  })();
+
+  function aggregateHhGroups(groupType: string, excludeAll = true) {
+    const map = new Map<string, { count: number; totalAvg: number; totalMedian: number }>();
+    for (const item of hhGroups) {
+      if (item.groupType !== groupType || !item.groupValue || !item.average) continue;
+      if (excludeAll && item.groupValue === "all") continue;
+      const existing = map.get(item.groupValue) || { count: 0, totalAvg: 0, totalMedian: 0 };
+      existing.count += item.observations;
+      existing.totalAvg += (item.average || 0) * item.observations;
+      existing.totalMedian += (item.median || item.average || 0) * item.observations;
+      map.set(item.groupValue, existing);
+    }
+    return Array.from(map.entries()).map(([name, item]) => ({
+      name,
+      hhAvgSalary: item.count > 0 ? Math.round(item.totalAvg / item.count) : 0,
+      hhMedianSalary: item.count > 0 ? Math.round(item.totalMedian / item.count) : 0,
+      hhCount: item.count,
+    }));
+  }
+
+  const hhRoleStats = aggregateHhGroups("role");
+
+  const hhGradeStats = aggregateHhGroups("grade");
+
+  const hhSelectedGroupStats = aggregateHhGroups(hhChartGroupType)
+    .sort((a, b) => b.hhCount - a.hhCount)
+    .slice(0, 12);
+
+  const combinedVacancyStats = (() => {
+    const map = new Map<string, { name: string; baseAvgSalary: number; hhAvgSalary: number; baseCount: number; hhCount: number }>();
+    for (const item of vacancyStats) {
+      map.set(item.name, {
+        name: item.name,
+        baseAvgSalary: item.avgSalary,
+        hhAvgSalary: 0,
+        baseCount: item.count,
+        hhCount: 0,
+      });
+    }
+    for (const item of hhRoleStats) {
+      const existing = map.get(item.name) || {
+        name: item.name,
+        baseAvgSalary: 0,
+        hhAvgSalary: 0,
+        baseCount: 0,
+        hhCount: 0,
+      };
+      existing.hhAvgSalary = item.hhAvgSalary;
+      existing.hhCount = item.hhCount;
+      map.set(item.name, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => (b.baseCount + b.hhCount) - (a.baseCount + a.hhCount));
+  })();
+
+  const combinedGradeStats = (() => {
+    const map = new Map<string, { name: string; baseAvgSalary: number; hhAvgSalary: number; baseCount: number; hhCount: number }>();
+    for (const item of gradeStats) {
+      map.set(item.name, {
+        name: item.name,
+        baseAvgSalary: item.avgSalary,
+        hhAvgSalary: 0,
+        baseCount: item.count,
+        hhCount: 0,
+      });
+    }
+    for (const item of hhGradeStats) {
+      const existing = map.get(item.name) || {
+        name: item.name,
+        baseAvgSalary: 0,
+        hhAvgSalary: 0,
+        baseCount: 0,
+        hhCount: 0,
+      };
+      existing.hhAvgSalary = item.hhAvgSalary;
+      existing.hhCount = item.hhCount;
+      map.set(item.name, existing);
+    }
+    return Array.from(map.values()).sort((a, b) => (b.baseCount + b.hhCount) - (a.baseCount + a.hhCount));
   })();
 
   // Тренд ЗП по месяцам (на основе дат из выгрузки)
@@ -223,6 +439,165 @@ export default function DashboardPage() {
       <div>
         <h1 className="text-2xl font-bold text-foreground">Дашборд</h1>
         <p className="text-text-secondary mt-1">Обзор аналитики зарплат</p>
+      </div>
+
+      {hhSummary && hhSummary.observations > 0 && (
+        <div className="card p-6 border-emerald-100 bg-emerald-50/30">
+          <div className="flex items-start justify-between gap-4 mb-4">
+            <div>
+              <h2 className="text-lg font-semibold text-foreground">HH-аналитика</h2>
+              <p className="text-sm text-text-secondary mt-1">
+                Отдельный снимок зарплатных ожиданий из HH, не смешивается с Huntflow.
+              </p>
+            </div>
+            <span className="text-xs px-2.5 py-1 rounded-full bg-white text-emerald-700 border border-emerald-100">
+              Источник: HH
+            </span>
+          </div>
+          <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+            <div className="rounded-lg bg-white border border-emerald-100 p-4">
+              <p className="text-xs text-text-secondary">Резюме с ЗП</p>
+              <p className="text-2xl font-bold text-foreground mt-1">{hhSummary.observations}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-emerald-100 p-4">
+              <p className="text-xs text-text-secondary">Медиана</p>
+              <p className="text-2xl font-bold text-foreground mt-1">{formatSalary(hhSummary.median || 0)}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-emerald-100 p-4">
+              <p className="text-xs text-text-secondary">Средняя</p>
+              <p className="text-2xl font-bold text-foreground mt-1">{formatSalary(hhSummary.average || 0)}</p>
+            </div>
+            <div className="rounded-lg bg-white border border-emerald-100 p-4">
+              <p className="text-xs text-text-secondary">Диапазон</p>
+              <p className="text-lg font-bold text-foreground mt-2">
+                {formatSalary(hhSummary.min || 0)} — {formatSalary(hhSummary.max || 0)}
+              </p>
+            </div>
+          </div>
+          {hhSummary.snapshotId && (
+            <p className="text-xs text-text-muted mt-3">Последний HH-снимок #{hhSummary.snapshotId}</p>
+          )}
+        </div>
+      )}
+
+      <div className="card p-5">
+        <div className="flex items-start justify-between gap-4 mb-4">
+          <div>
+            <h2 className="text-lg font-semibold text-foreground">Настройки HH-графиков</h2>
+            <p className="text-sm text-text-secondary mt-1">
+              Выберите роль, грейд и срез истории. Если срез не выбран, график строится по всей истории поиска.
+            </p>
+          </div>
+          <span className="text-xs px-2.5 py-1 rounded-full bg-emerald-50 text-emerald-700 border border-emerald-100">
+            HH
+          </span>
+        </div>
+        <div className="grid grid-cols-1 md:grid-cols-3 xl:grid-cols-6 gap-4">
+          <label className="block">
+            <span className="block text-xs font-medium text-text-secondary mb-1.5">Роль / поиск</span>
+            <select
+              value={hhChartRole}
+              onChange={(e) => {
+                setHhChartRole(e.target.value);
+                setHhChartGrade("");
+                setHhChartWorkshop("");
+                setHhChartSubWorkshop("");
+                setHhChartSnapshotId("");
+              }}
+              className="select text-sm"
+            >
+              <option value="">Все роли</option>
+              {(hhFilterOptions.roles.length > 0
+                ? hhFilterOptions.roles
+                : Array.from(new Set(hhSearches.map((search) => search.role || search.name).filter(Boolean)))
+              ).map((role) => (
+                <option key={role} value={role}>{role}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-text-secondary mb-1.5">Цех</span>
+            <select
+              value={hhChartWorkshop}
+              onChange={(e) => {
+                setHhChartWorkshop(e.target.value);
+                setHhChartSubWorkshop("");
+                setHhChartSnapshotId("");
+              }}
+              className="select text-sm"
+            >
+              <option value="">Все цеха</option>
+              {hhFilterOptions.workshops.map((workshop) => (
+                <option key={workshop} value={workshop}>{workshop}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-text-secondary mb-1.5">Подцех</span>
+            <select
+              value={hhChartSubWorkshop}
+              onChange={(e) => {
+                setHhChartSubWorkshop(e.target.value);
+                setHhChartSnapshotId("");
+              }}
+              className="select text-sm"
+            >
+              <option value="">Все подцехи</option>
+              {hhFilterOptions.subWorkshops.map((subWorkshop) => (
+                <option key={subWorkshop} value={subWorkshop}>{subWorkshop}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-text-secondary mb-1.5">Грейд</span>
+            <select
+              value={hhChartGrade}
+              onChange={(e) => {
+                setHhChartGrade(e.target.value);
+                setHhChartSnapshotId("");
+              }}
+              className="select text-sm"
+            >
+              <option value="">Все доступные</option>
+              {hhFilterOptions.grades.map((grade) => (
+                <option key={grade} value={grade}>{grade}</option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-text-secondary mb-1.5">Срез истории</span>
+            <select
+              value={hhChartSnapshotId}
+              onChange={(e) => setHhChartSnapshotId(e.target.value)}
+              className="select text-sm"
+            >
+              <option value="">Вся история поиска</option>
+              {(hhFilterOptions.cuts.length > 0 ? hhFilterOptions.cuts : hhSnapshots).map((snapshot) => (
+                <option key={snapshot.id} value={snapshot.id}>
+                  #{snapshot.id} · {new Date(snapshot.created_at).toLocaleString("ru-RU", {
+                    day: "2-digit",
+                    month: "2-digit",
+                    year: "numeric",
+                    hour: "2-digit",
+                    minute: "2-digit",
+                  })}
+                </option>
+              ))}
+            </select>
+          </label>
+          <label className="block">
+            <span className="block text-xs font-medium text-text-secondary mb-1.5">Разрез</span>
+            <select
+              value={hhChartGroupType}
+              onChange={(e) => setHhChartGroupType(e.target.value)}
+              className="select text-sm"
+            >
+              {HH_GROUP_TYPES.map((item) => (
+                <option key={item.value} value={item.value}>{item.label}</option>
+              ))}
+            </select>
+          </label>
+        </div>
       </div>
 
       {/* Фильтры */}
@@ -354,19 +729,26 @@ export default function DashboardPage() {
         )}
 
         {/* ЗП по вакансиям */}
-        {vacancyStats.length > 0 && (
+        {combinedVacancyStats.length > 0 && (
           <div className="card p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4">
-              ЗП по вакансиям
+              ЗП по ролям: база + HH
             </h2>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={vacancyStats} layout="vertical">
+                <BarChart data={combinedVacancyStats} layout="vertical">
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => formatSalary(v)} />
                   <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
-                  <Tooltip formatter={(value) => [formatSalary(value as number), "Средняя ЗП"]} />
-                  <Bar dataKey="avgSalary" fill="#10b981" radius={[0, 4, 4, 0]} />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      formatSalary(value as number),
+                      name === "hhAvgSalary" ? "HH" : "База",
+                    ]}
+                  />
+                  <Legend />
+                  <Bar dataKey="baseAvgSalary" name="База" fill="#10b981" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="hhAvgSalary" name="HH" fill="#f59e0b" radius={[0, 4, 4, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -393,20 +775,53 @@ export default function DashboardPage() {
           </div>
         )}
 
-        {/* ЗП по грейдам */}
-        {gradeStats.length > 0 && (
+        {hhSelectedGroupStats.length > 0 && (
           <div className="card p-6">
             <h2 className="text-lg font-semibold text-foreground mb-4">
-              ЗП по грейдам
+              HH по выбранному разрезу
             </h2>
             <div className="h-72">
               <ResponsiveContainer width="100%" height="100%">
-                <BarChart data={gradeStats}>
+                <BarChart data={hhSelectedGroupStats} layout="vertical">
+                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                  <XAxis type="number" tick={{ fontSize: 11 }} tickFormatter={(v) => formatSalary(v)} />
+                  <YAxis type="category" dataKey="name" tick={{ fontSize: 11 }} width={120} />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      name === "hhCount" ? `${value} резюме` : formatSalary(value as number),
+                      name === "hhMedianSalary" ? "Медиана HH" : name === "hhCount" ? "Резюме" : "Средняя HH",
+                    ]}
+                  />
+                  <Legend />
+                  <Bar dataKey="hhAvgSalary" name="Средняя HH" fill="#0ea5e9" radius={[0, 4, 4, 0]} />
+                  <Bar dataKey="hhMedianSalary" name="Медиана HH" fill="#f59e0b" radius={[0, 4, 4, 0]} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+        )}
+
+        {/* ЗП по грейдам */}
+        {combinedGradeStats.length > 0 && (
+          <div className="card p-6">
+            <h2 className="text-lg font-semibold text-foreground mb-4">
+              ЗП по грейдам: база + HH
+            </h2>
+            <div className="h-72">
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart data={combinedGradeStats}>
                   <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
                   <XAxis dataKey="name" tick={{ fontSize: 11 }} />
                   <YAxis tick={{ fontSize: 11 }} tickFormatter={(v) => formatSalary(v)} />
-                  <Tooltip formatter={(value) => [formatSalary(value as number), "Средняя ЗП"]} />
-                  <Bar dataKey="avgSalary" fill="#f59e0b" radius={[4, 4, 0, 0]} />
+                  <Tooltip
+                    formatter={(value, name) => [
+                      formatSalary(value as number),
+                      name === "hhAvgSalary" ? "HH" : "База",
+                    ]}
+                  />
+                  <Legend />
+                  <Bar dataKey="baseAvgSalary" name="База" fill="#3b82f6" radius={[4, 4, 0, 0]} />
+                  <Bar dataKey="hhAvgSalary" name="HH" fill="#f59e0b" radius={[4, 4, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>

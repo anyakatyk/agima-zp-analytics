@@ -2,6 +2,23 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+## Local secrets
+
+Do not commit `.env.local`. It contains local secrets and is ignored by git.
+
+Create a local password hash:
+
+```bash
+node -e "const bcrypt=require('bcryptjs'); console.log(bcrypt.hashSync('your-password', 10))"
+```
+
+Then add users to `.env.local` using `APP_USERS_JSON`. Escape `$` symbols in bcrypt hashes as `\$`.
+
+```bash
+JWT_SECRET=replace-with-long-random-secret
+APP_USERS_JSON='[{"id":"1","email":"admin@example.com","passwordHash":"\$2b\$10\$hash","name":"Администратор","role":"admin"}]'
+```
+
 First, run the development server:
 
 ```bash
