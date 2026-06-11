@@ -71,6 +71,16 @@ type HhSnapshot = {
   } | null;
 };
 
+type HhStorageStatus = {
+  persistence?: "kv-redis" | "runtime-memory";
+  configured?: boolean;
+  searchesTotal?: number;
+  snapshotsTotal?: number;
+  snapshotsReturned?: number;
+  lastAction?: "load" | "save" | "none";
+  lastError?: string | null;
+};
+
 const FREQUENCIES = [
   { value: "week", label: "Неделя" },
   { value: "month", label: "Месяц" },
@@ -115,6 +125,7 @@ export default function ReportsPage() {
   const [hhFrequency, setHhFrequency] = useState("month");
   const [hhStatus, setHhStatus] = useState<string | null>(null);
   const [hhSummary, setHhSummary] = useState<HhSalarySummary | null>(null);
+  const [hhStorageStatus, setHhStorageStatus] = useState<HhStorageStatus | null>(null);
   const [hhSearches, setHhSearches] = useState<HhSearch[]>([]);
   const [hhSnapshots, setHhSnapshots] = useState<HhSnapshot[]>([]);
   const [historySearchFilter, setHistorySearchFilter] = useState("");
@@ -280,6 +291,14 @@ export default function ReportsPage() {
       }
 
       const snapshotId = data.result?.snapshotId;
+      setHhStorageStatus(data.storage || null);
+      if (data.result?.summary) {
+        setHhSummary({
+          snapshotId: snapshotId || null,
+          source: "HH",
+          ...data.result.summary,
+        });
+      }
       setHhStatus(action === "saveAndRun"
         ? `Готово: поиск сохранён, снимок HH #${snapshotId || "создан"} добавлен в историю`
         : "Поиск сохранён в историю настроек"
@@ -306,6 +325,7 @@ export default function ReportsPage() {
       const data = await res.json();
       setHhSearches(data.searches || []);
       setHhSnapshots(data.snapshots || []);
+      setHhStorageStatus(data.storage || null);
     } catch {
       setHhStatus("Не удалось загрузить историю HH");
     }
@@ -325,6 +345,7 @@ export default function ReportsPage() {
         setHhStatus(data.error || "Не удалось обновить подписки");
         return;
       }
+      setHhStorageStatus(data.storage || null);
       setHhStatus(`Готово: обновлено подписок ${data.ran || 0}`);
       await loadHhHistory();
     } catch {
@@ -348,6 +369,7 @@ export default function ReportsPage() {
         setHhStatus(data.error || "Не удалось удалить снимок");
         return;
       }
+      setHhStorageStatus(data.storage || null);
       setHhStatus(`Снимок HH #${snapshotId} удалён из истории`);
       await loadHhHistory();
     } catch {
@@ -883,6 +905,15 @@ export default function ReportsPage() {
             <p className="text-sm text-gray-500 mt-1">
               Каждый запуск сохраняется отдельным снимком. Ошибочный снимок можно удалить из истории.
             </p>
+            {hhStorageStatus && (
+              <p className="text-xs text-gray-500 mt-2">
+                Хранилище: {hhStorageStatus.persistence === "kv-redis" ? "KV/Redis" : "память сервера"}
+                {" · "}всего поисков: {hhStorageStatus.searchesTotal ?? 0}
+                {" · "}всего снимков: {hhStorageStatus.snapshotsTotal ?? 0}
+                {" · "}показано по фильтрам: {hhStorageStatus.snapshotsReturned ?? hhSnapshots.length}
+                {hhStorageStatus.lastError ? ` · ошибка: ${hhStorageStatus.lastError}` : ""}
+              </p>
+            )}
           </div>
           <div className="flex flex-wrap gap-2">
             <button

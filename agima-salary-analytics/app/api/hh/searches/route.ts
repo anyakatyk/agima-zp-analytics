@@ -101,6 +101,15 @@ type Store = {
   snapshots: Snapshot[];
 };
 
+type StorageDebug = {
+  persistence: "kv-redis" | "runtime-memory";
+  configured: boolean;
+  searchesTotal: number;
+  snapshotsTotal: number;
+  lastAction: "load" | "save" | "none";
+  lastError: string | null;
+};
+
 const HH_API_BASE = "https://api.hh.ru";
 const HH_USER_AGENT =
   process.env.HH_USER_AGENT || "agima-zp-analytics/1.0 (salary analytics)";
@@ -120,6 +129,9 @@ let store: Store =
   };
 
 globalStore.__hhSalaryStore = store;
+
+let storageLastAction: StorageDebug["lastAction"] = "none";
+let storageLastError: string | null = null;
 
 function redisConfig() {
   const url =
@@ -158,6 +170,18 @@ async function redisCommand<T>(command: unknown[]): Promise<T | null> {
   return data.result ?? null;
 }
 
+function storageDebug(): StorageDebug {
+  const configured = Boolean(redisConfig());
+  return {
+    persistence: configured ? "kv-redis" : "runtime-memory",
+    configured,
+    searchesTotal: store.searches.length,
+    snapshotsTotal: store.snapshots.length,
+    lastAction: storageLastAction,
+    lastError: storageLastError,
+  };
+}
+
 function parseStore(value: string | null): Store | null {
   if (!value) return null;
 
@@ -175,11 +199,20 @@ function parseStore(value: string | null): Store | null {
 }
 
 async function loadStore(): Promise<Store> {
-  const value = await redisCommand<string>(["GET", REDIS_STATE_KEY]);
-  const persisted = parseStore(value);
-  if (persisted) {
-    store = persisted;
-    globalStore.__hhSalaryStore = store;
+  try {
+    const value = await redisCommand<string>(["GET", REDIS_STATE_KEY]);
+    const persisted = parseStore(value);
+    if (persisted) {
+      store = persisted;
+      globalStore.__hhSalaryStore = store;
+    }
+    storageLastAction = "load";
+    storageLastError = null;
+  } catch (error) {
+    storageLastAction = "load";
+    storageLastError =
+      error instanceof Error ? error.message : "Unknown Redis load error";
+    throw error;
   }
 
   return store;
@@ -187,7 +220,16 @@ async function loadStore(): Promise<Store> {
 
 async function saveStore(): Promise<void> {
   globalStore.__hhSalaryStore = store;
-  await redisCommand(["SET", REDIS_STATE_KEY, JSON.stringify(store)]);
+  try {
+    await redisCommand(["SET", REDIS_STATE_KEY, JSON.stringify(store)]);
+    storageLastAction = "save";
+    storageLastError = null;
+  } catch (error) {
+    storageLastAction = "save";
+    storageLastError =
+      error instanceof Error ? error.message : "Unknown Redis save error";
+    throw error;
+  }
 }
 
 function cleanValue(value: unknown): string {
@@ -645,6 +687,10 @@ export async function GET(request: NextRequest) {
       groups: buildGroups(snapshots, params),
       filterOptions: filterOptions(),
       persistence: redisConfig() ? "kv-redis" : "runtime-memory",
+      storage: {
+        ...storageDebug(),
+        snapshotsReturned: snapshots.length,
+      },
     },
     { headers: { "Cache-Control": "no-store" } }
   );
@@ -676,7 +722,7 @@ export async function POST(request: NextRequest) {
       );
       await saveStore();
       return NextResponse.json(
-        { ok: true, deleted: before - store.snapshots.length },
+        { ok: true, deleted: before - store.snapshots.length, storage: storageDebug() },
         { headers: { "Cache-Control": "no-store" } }
       );
     }
@@ -694,7 +740,7 @@ export async function POST(request: NextRequest) {
       }
       await saveStore();
       return NextResponse.json(
-        { ok: true, ran: results.length, results },
+        { ok: true, ran: results.length, results, storage: storageDebug() },
         { headers: { "Cache-Control": "no-store" } }
       );
     }
@@ -720,7 +766,7 @@ export async function POST(request: NextRequest) {
       }
       await saveStore();
       return NextResponse.json(
-        { ok: true, ran: results.length, results },
+        { ok: true, ran: results.length, results, storage: storageDebug() },
         { headers: { "Cache-Control": "no-store" } }
       );
     }
@@ -751,14 +797,14 @@ export async function POST(request: NextRequest) {
       const result = await runSavedSearch(search, "on_demand");
       await saveStore();
       return NextResponse.json(
-        { ok: true, search, result },
+        { ok: true, search, result, storage: storageDebug() },
         { headers: { "Cache-Control": "no-store" } }
       );
     }
 
     await saveStore();
     return NextResponse.json(
-      { ok: true, search },
+      { ok: true, search, storage: storageDebug() },
       { headers: { "Cache-Control": "no-store" } }
     );
   } catch (error) {
