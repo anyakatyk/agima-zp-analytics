@@ -3,6 +3,7 @@ import { verifyToken, COOKIE_NAME, getUserFromPayload } from "@/lib/auth";
 import { canSyncHuntflow } from "@/lib/security/access-control";
 import { logAuditEvent } from "@/lib/security/audit-log";
 import { buildCleanHuntflowWorkbook } from "@/lib/huntflow-clean-export";
+import { createRefreshAccessToken, getHuntflowAuth } from "@/lib/huntflow-auth";
 
 export async function GET(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
@@ -20,14 +21,13 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const hfToken = process.env.HUNTFLOW_API_TOKEN;
-  const accountId = process.env.HUNTFLOW_ACCOUNT_ID;
+  const auth = await getHuntflowAuth();
 
-  if (!hfToken || !accountId) {
+  if (!auth) {
     return NextResponse.json(
       {
         error:
-          "Huntflow API не настроен. Добавьте HUNTFLOW_API_TOKEN и HUNTFLOW_ACCOUNT_ID в .env.local",
+          "Huntflow API не настроен. Добавьте HUNTFLOW_REFRESH_TOKEN и HUNTFLOW_ACCOUNT_ID в переменные окружения",
       },
       { status: 500 }
     );
@@ -35,8 +35,9 @@ export async function GET(request: NextRequest) {
 
   try {
     const result = await buildCleanHuntflowWorkbook({
-      token: hfToken,
-      accountId: parseInt(accountId),
+      token: auth.accessToken,
+      accountId: auth.accountId,
+      refreshAccessToken: createRefreshAccessToken(auth.refreshToken),
     });
 
     logAuditEvent({

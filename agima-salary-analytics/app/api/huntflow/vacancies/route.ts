@@ -1,7 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME, getUserFromPayload } from "@/lib/auth";
 import { canSyncHuntflow } from "@/lib/security/access-control";
-import { HuntflowClient } from "@/lib/huntflow-client";
+import { createHuntflowClient } from "@/lib/huntflow-auth";
 
 function getVacancyName(vacancy: {
   position?: string;
@@ -27,21 +27,19 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const hfToken = process.env.HUNTFLOW_API_TOKEN;
-  const accountId = process.env.HUNTFLOW_ACCOUNT_ID;
+  const client = await createHuntflowClient();
 
-  if (!hfToken || !accountId) {
+  if (!client) {
     return NextResponse.json(
       {
         error:
-          "Huntflow API не настроен. Добавьте HUNTFLOW_API_TOKEN и HUNTFLOW_ACCOUNT_ID в .env.local",
+          "Huntflow API не настроен. Добавьте HUNTFLOW_REFRESH_TOKEN и HUNTFLOW_ACCOUNT_ID в переменные окружения",
       },
       { status: 500 }
     );
   }
 
   try {
-    const client = new HuntflowClient(hfToken, parseInt(accountId));
     const vacancies = await client.getVacancies();
 
     return NextResponse.json(

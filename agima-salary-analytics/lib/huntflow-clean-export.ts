@@ -34,10 +34,13 @@ export type CleanHuntflowProgress = {
 export async function buildCleanHuntflowWorkbook(params: {
   token: string;
   accountId: number;
+  refreshAccessToken?: () => Promise<string>;
   vacancyIds?: number[];
   onProgress?: (progress: CleanHuntflowProgress) => void;
 }): Promise<CleanHuntflowWorkbook> {
-  const client = new HuntflowClient(params.token, params.accountId);
+  const client = new HuntflowClient(params.token, params.accountId, {
+    refreshAccessToken: params.refreshAccessToken,
+  });
   const vacancyCount = params.vacancyIds?.length || 0;
   params.onProgress?.({
     stage: "huntflow",

@@ -33,6 +33,7 @@ globalForHuntflowJobs.__huntflowExportJobs = jobs;
 export function createHuntflowExportJob(params: {
   token: string;
   accountId: number;
+  refreshAccessToken?: () => Promise<string>;
   vacancyIds?: number[];
 }): HuntflowExportJob {
   const now = new Date().toISOString();
@@ -62,7 +63,12 @@ export function getHuntflowExportJobFile(id: string): HuntflowExportJob | undefi
 
 async function runJob(
   id: string,
-  params: { token: string; accountId: number; vacancyIds?: number[] }
+  params: {
+    token: string;
+    accountId: number;
+    refreshAccessToken?: () => Promise<string>;
+    vacancyIds?: number[];
+  }
 ) {
   const job = jobs.get(id);
   if (!job) return;

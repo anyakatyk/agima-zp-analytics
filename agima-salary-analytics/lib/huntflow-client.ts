@@ -10,6 +10,10 @@ import { huntflowToSalaryRecord } from "./salary-record-normalizer";
 const BASE_URL = process.env.HUNTFLOW_API_BASE_URL || "https://api.huntflow.ru/v2";
 const REQUEST_TIMEOUT_MS = 20_000;
 
+type HuntflowClientOptions = {
+  refreshAccessToken?: () => Promise<string>;
+};
+
 export type HuntflowRawExportRow = {
   rowIndex: number;
   fullName: string;
@@ -28,23 +32,53 @@ export type HuntflowRawExportRow = {
 export class HuntflowClient {
   private token: string;
   private accountId: number;
+  private refreshAccessToken?: () => Promise<string>;
 
-  constructor(token: string, accountId: number) {
+  constructor(token: string, accountId: number, options?: HuntflowClientOptions) {
     this.token = token;
     this.accountId = accountId;
+    this.refreshAccessToken = options?.refreshAccessToken;
   }
 
   private async request<T>(
     path: string,
     options?: RequestInit
   ): Promise<T> {
+    const res = await this.fetchWithAuthRefresh(path, options);
+    if (!res.ok) {
+      const details = await res.text();
+      throw new Error(
+        `Huntflow API error: ${res.status} ${res.statusText}${details ? `: ${details.slice(0, 500)}` : ""}`
+      );
+    }
+
+    return res.json();
+  }
+
+  private async fetchWithAuthRefresh(
+    path: string,
+    options?: RequestInit
+  ): Promise<Response> {
+    if (!this.token && this.refreshAccessToken) {
+      this.token = await this.refreshAccessToken();
+    }
+
+    let res = await this.fetchRaw(path, options);
+    if (res.status === 401 && this.refreshAccessToken) {
+      this.token = await this.refreshAccessToken();
+      res = await this.fetchRaw(path, options);
+    }
+
+    return res;
+  }
+
+  private async fetchRaw(path: string, options?: RequestInit): Promise<Response> {
     const url = `${BASE_URL}${path}`;
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), REQUEST_TIMEOUT_MS);
 
-    let res: Response;
     try {
-      res = await fetch(url, {
+      return await fetch(url, {
         ...options,
         signal: options?.signal || controller.signal,
         headers: {
@@ -61,15 +95,6 @@ export class HuntflowClient {
     } finally {
       clearTimeout(timeout);
     }
-
-    if (!res.ok) {
-      const details = await res.text();
-      throw new Error(
-        `Huntflow API error: ${res.status} ${res.statusText}${details ? `: ${details.slice(0, 500)}` : ""}`
-      );
-    }
-
-    return res.json();
   }
 
   private buildPath(path: string, params?: Record<string, string | number | undefined>): string {
