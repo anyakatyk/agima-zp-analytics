@@ -547,16 +547,19 @@ function matches(value: string | null | undefined, filter: string | null): boole
   return !filter || (value || "").toLowerCase() === filter.toLowerCase();
 }
 
+function parsePositiveIds(value: string | null): number[] {
+  if (!value) return [];
+
+  return value
+    .split(",")
+    .map((item) => Number(item))
+    .filter((item) => Number.isInteger(item) && item > 0);
+}
+
 function filterSnapshots(params: URLSearchParams): Snapshot[] {
   const searchId = Number(params.get("searchId"));
-  const searchIds = (params.get("searchIds") || "")
-    .split(",")
-    .map(Number)
-    .filter(Number.isFinite);
-  const snapshotIds = (params.get("snapshotIds") || "")
-    .split(",")
-    .map(Number)
-    .filter(Number.isFinite);
+  const searchIds = parsePositiveIds(params.get("searchIds"));
+  const snapshotIds = parsePositiveIds(params.get("snapshotIds"));
   const fromDate = params.get("fromDate");
   const toDate = params.get("toDate");
 
