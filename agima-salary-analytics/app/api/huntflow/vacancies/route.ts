@@ -2,6 +2,10 @@ import { NextRequest, NextResponse } from "next/server";
 import { verifyToken, COOKIE_NAME, getUserFromPayload } from "@/lib/auth";
 import { canSyncHuntflow } from "@/lib/security/access-control";
 import { createHuntflowClient } from "@/lib/huntflow-auth";
+import {
+  getMiddlewareVacancies,
+  isHuntflowMiddlewareEnabled,
+} from "@/lib/huntflow-middleware-client";
 
 function getVacancyName(vacancy: {
   position?: string;
@@ -27,19 +31,27 @@ export async function GET(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const client = await createHuntflowClient();
-
-  if (!client) {
-    return NextResponse.json(
-      {
-        error:
-          "Huntflow API не настроен. Добавьте HUNTFLOW_REFRESH_TOKEN и HUNTFLOW_ACCOUNT_ID в переменные окружения",
-      },
-      { status: 500 }
-    );
-  }
-
   try {
+    if (isHuntflowMiddlewareEnabled()) {
+      const vacancies = await getMiddlewareVacancies();
+
+      return NextResponse.json(
+        { vacancies },
+        { headers: { "Cache-Control": "no-store" } }
+      );
+    }
+
+    const client = await createHuntflowClient();
+    if (!client) {
+      return NextResponse.json(
+        {
+          error:
+            "Huntflow API не настроен. Добавьте HUNTFLOW_MIDDLEWARE_URL или HUNTFLOW_REFRESH_TOKEN и HUNTFLOW_ACCOUNT_ID в переменные окружения",
+        },
+        { status: 500 }
+      );
+    }
+
     const vacancies = await client.getVacancies();
 
     return NextResponse.json(

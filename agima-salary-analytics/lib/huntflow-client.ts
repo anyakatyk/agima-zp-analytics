@@ -16,7 +16,6 @@ type HuntflowClientOptions = {
 
 export type HuntflowRawExportRow = {
   rowIndex: number;
-  fullName: string;
   lastWorkplace: string;
   position: string;
   salary: string;
@@ -306,7 +305,6 @@ export class HuntflowClient {
             );
             rows.push({
               rowIndex: rows.length,
-              fullName: this.getApplicantFullName(applicant),
               lastWorkplace: record.lastWorkplace || this.stringify(applicant.company || applicant.experience),
               position: record.position || applicant.position || "",
               salary: this.formatSalary(record) || this.stringify(applicant.money || applicant.salary),

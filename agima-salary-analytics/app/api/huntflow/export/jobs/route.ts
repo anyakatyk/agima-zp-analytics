@@ -4,6 +4,7 @@ import { canSyncHuntflow } from "@/lib/security/access-control";
 import { logAuditEvent } from "@/lib/security/audit-log";
 import { createHuntflowExportJob } from "@/lib/huntflow-export-jobs";
 import { createRefreshAccessToken, getHuntflowAuth } from "@/lib/huntflow-auth";
+import { isHuntflowMiddlewareEnabled } from "@/lib/huntflow-middleware-client";
 
 export async function POST(request: NextRequest) {
   const token = request.cookies.get(COOKIE_NAME)?.value;
@@ -21,13 +22,14 @@ export async function POST(request: NextRequest) {
     return NextResponse.json({ error: "Forbidden" }, { status: 403 });
   }
 
-  const auth = await getHuntflowAuth();
+  const useMiddleware = isHuntflowMiddlewareEnabled();
+  const auth = useMiddleware ? null : await getHuntflowAuth();
 
-  if (!auth) {
+  if (!useMiddleware && !auth) {
     return NextResponse.json(
       {
         error:
-          "Huntflow API не настроен. Добавьте HUNTFLOW_REFRESH_TOKEN и HUNTFLOW_ACCOUNT_ID в переменные окружения",
+          "Huntflow API не настроен. Добавьте HUNTFLOW_MIDDLEWARE_URL или HUNTFLOW_REFRESH_TOKEN и HUNTFLOW_ACCOUNT_ID в переменные окружения",
       },
       { status: 500 }
     );
@@ -46,9 +48,12 @@ export async function POST(request: NextRequest) {
   }
 
   const job = createHuntflowExportJob({
-    token: auth.accessToken,
-    accountId: auth.accountId,
-    refreshAccessToken: createRefreshAccessToken(auth.refreshToken),
+    token: auth?.accessToken,
+    accountId: auth?.accountId,
+    refreshAccessToken: auth
+      ? createRefreshAccessToken(auth.refreshToken)
+      : undefined,
+    useMiddleware,
     vacancyIds,
   });
 

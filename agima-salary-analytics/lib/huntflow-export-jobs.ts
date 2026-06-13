@@ -1,4 +1,5 @@
 import { buildCleanHuntflowWorkbook } from "./huntflow-clean-export";
+import { getMiddlewareExportRows } from "./huntflow-middleware-client";
 
 export type HuntflowExportJobStatus = "queued" | "running" | "ready" | "error";
 
@@ -31,9 +32,10 @@ const jobs =
 globalForHuntflowJobs.__huntflowExportJobs = jobs;
 
 export function createHuntflowExportJob(params: {
-  token: string;
-  accountId: number;
+  token?: string;
+  accountId?: number;
   refreshAccessToken?: () => Promise<string>;
+  useMiddleware?: boolean;
   vacancyIds?: number[];
 }): HuntflowExportJob {
   const now = new Date().toISOString();
@@ -64,9 +66,10 @@ export function getHuntflowExportJobFile(id: string): HuntflowExportJob | undefi
 async function runJob(
   id: string,
   params: {
-    token: string;
-    accountId: number;
+    token?: string;
+    accountId?: number;
     refreshAccessToken?: () => Promise<string>;
+    useMiddleware?: boolean;
     vacancyIds?: number[];
   }
 ) {
@@ -80,8 +83,18 @@ async function runJob(
     message: "Запускаем выгрузку",
   });
   try {
+    let rawRows;
+    if (params.useMiddleware) {
+      updateJob(job, {
+        stage: "middleware",
+        message: "Загружаем обезличенные данные из внутреннего сервиса",
+      });
+      rawRows = await getMiddlewareExportRows(params.vacancyIds);
+    }
+
     const result = await buildCleanHuntflowWorkbook({
       ...params,
+      rawRows,
       onProgress: (progress) => {
         updateJob(job, {
           stage: progress.stage,

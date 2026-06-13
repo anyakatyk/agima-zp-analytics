@@ -1,6 +1,6 @@
 import { HuntflowClient } from "./huntflow-client";
+import type { HuntflowRawExportRow } from "./huntflow-client";
 import {
-  cleanHuntflowRowsWithInternalLlm,
   removePersonalDataWithoutLlm,
   type CleanHuntflowExportRow,
 } from "./internal-llm-cleaner";
@@ -33,58 +33,49 @@ export type CleanHuntflowProgress = {
 };
 
 export async function buildCleanHuntflowWorkbook(params: {
-  token: string;
-  accountId: number;
+  token?: string;
+  accountId?: number;
   refreshAccessToken?: () => Promise<string>;
   vacancyIds?: number[];
+  rawRows?: HuntflowRawExportRow[];
   onProgress?: (progress: CleanHuntflowProgress) => void;
 }): Promise<CleanHuntflowWorkbook> {
-  const client = new HuntflowClient(params.token, params.accountId, {
-    refreshAccessToken: params.refreshAccessToken,
-  });
   const vacancyCount = params.vacancyIds?.length || 0;
-  params.onProgress?.({
-    stage: "huntflow",
-    message: vacancyCount
-      ? `Загружаем кандидатов по выбранным вакансиям: ${vacancyCount}`
-      : "Загружаем кандидатов и вакансии из Huntflow",
-  });
-  const rawRows = await client.collectRawExportRowsForInternalLlm({
-    vacancyIds: params.vacancyIds,
-    onProgress: (progress) => {
-      params.onProgress?.({
-        stage: "huntflow",
-        message: progress.message,
-        current: progress.current,
-        total: progress.total,
-      });
-    },
-  });
-  params.onProgress?.({
-    stage: "llm",
-    message: "Очищаем ФИО через внутреннюю LLM",
-    current: 0,
-    total: rawRows.length,
-  });
-  let records: CleanHuntflowExportRow[];
-  try {
-    records = await cleanHuntflowRowsWithInternalLlm(rawRows, (progress) => {
-      params.onProgress?.({
-        stage: "llm",
-        message: "Очищаем ФИО через внутреннюю LLM",
-        current: progress.current,
-        total: progress.total,
-      });
+  let rawRows = params.rawRows;
+
+  if (!rawRows) {
+    if (!params.token || !params.accountId) {
+      throw new Error("Huntflow export source is not configured");
+    }
+
+    const client = new HuntflowClient(params.token, params.accountId, {
+      refreshAccessToken: params.refreshAccessToken,
     });
-  } catch {
-    records = removePersonalDataWithoutLlm(rawRows);
     params.onProgress?.({
-      stage: "excel",
-      message: "Внутренняя LLM недоступна. Собираем Excel без ФИО напрямую",
-      current: records.length,
-      total: records.length,
+      stage: "huntflow",
+      message: vacancyCount
+        ? `Загружаем кандидатов по выбранным вакансиям: ${vacancyCount}`
+        : "Загружаем кандидатов и вакансии из Huntflow",
+    });
+    rawRows = await client.collectRawExportRowsForInternalLlm({
+      vacancyIds: params.vacancyIds,
+      onProgress: (progress) => {
+        params.onProgress?.({
+          stage: "huntflow",
+          message: progress.message,
+          current: progress.current,
+          total: progress.total,
+        });
+      },
     });
   }
+  params.onProgress?.({
+    stage: "excel",
+    message: "Удаляем персональные поля и собираем Excel",
+    current: rawRows.length,
+    total: rawRows.length,
+  });
+  const records: CleanHuntflowExportRow[] = removePersonalDataWithoutLlm(rawRows);
   params.onProgress?.({
     stage: "excel",
     message: "Собираем Excel без ФИО",
