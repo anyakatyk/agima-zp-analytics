@@ -1,6 +1,7 @@
 import { HuntflowClient } from "./huntflow-client";
 import {
   cleanHuntflowRowsWithInternalLlm,
+  removePersonalDataWithoutLlm,
   type CleanHuntflowExportRow,
 } from "./internal-llm-cleaner";
 import ExcelJS from "exceljs";
@@ -65,14 +66,25 @@ export async function buildCleanHuntflowWorkbook(params: {
     current: 0,
     total: rawRows.length,
   });
-  const records = await cleanHuntflowRowsWithInternalLlm(rawRows, (progress) => {
-    params.onProgress?.({
-      stage: "llm",
-      message: "Очищаем ФИО через внутреннюю LLM",
-      current: progress.current,
-      total: progress.total,
+  let records: CleanHuntflowExportRow[];
+  try {
+    records = await cleanHuntflowRowsWithInternalLlm(rawRows, (progress) => {
+      params.onProgress?.({
+        stage: "llm",
+        message: "Очищаем ФИО через внутреннюю LLM",
+        current: progress.current,
+        total: progress.total,
+      });
     });
-  });
+  } catch {
+    records = removePersonalDataWithoutLlm(rawRows);
+    params.onProgress?.({
+      stage: "excel",
+      message: "Внутренняя LLM недоступна. Собираем Excel без ФИО напрямую",
+      current: records.length,
+      total: records.length,
+    });
+  }
   params.onProgress?.({
     stage: "excel",
     message: "Собираем Excel без ФИО",
